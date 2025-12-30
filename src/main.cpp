@@ -326,17 +326,25 @@ void setup() {
   Serial.println(F("[Storage] Initializing NVS..."));
   initEEPROM();
 
-  // Load saved state or start with egg
-  if (validEEPROM()) {
-    Serial.println(F("[Storage] Loading saved state..."));
-    loadStateFromEEPROM(&cpuState);
-  } else {
-    Serial.println(F("[Storage] No saved state, loading initial egg state"));
-    loadHardcodedState(&cpuState);
-  }
+  // TEMPORARY: Force load egg state and clear old saves
+  // This ensures fresh start with proper initial state
+  Serial.println(F("[Storage] Clearing old state and loading fresh egg..."));
+  eraseStateFromEEPROM();
+  loadHardcodedState(&cpuState);
+
+  // TODO: Restore normal save/load logic after testing:
+  // if (validEEPROM()) {
+  //   loadStateFromEEPROM(&cpuState);
+  // } else {
+  //   loadHardcodedState(&cpuState);
+  // }
 
   Serial.println(F("\n[Main] Tamagotchi initialized!"));
   Serial.println(F("[Main] Use encoder to navigate, press to select\n"));
+
+  // Force initial screen update to show the egg
+  Serial.println(F("[Main] Forcing initial screen update..."));
+  hal_update_screen();
 
   setLedOff();  // LED off
 }

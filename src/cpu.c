@@ -605,8 +605,17 @@ static void set_io(u12_t n, u4_t v)
 
 static void set_lcd(u12_t n, u4_t v)
 {
+  static int lcdCallCount = 0;
   u8_t i;
   u8_t seg, com0;
+
+  lcdCallCount++;
+  if (lcdCallCount <= 5) {
+    Serial.printf("[CPU] set_lcd() called! Address=0x%03X, Value=0x%X\n", n, v);
+  }
+  if (lcdCallCount == 1) {
+    Serial.println(F("[CPU] *** LCD CONTROLLER IS ACTIVE ***"));
+  }
 
   seg = ((n & 0x7F) >> 1);
   com0 = (((n & 0x80) >> 7) * 8 + (n & 0x1) * 4);
@@ -679,6 +688,8 @@ static u4_t get_memory(u12_t n)
 
 static void set_memory(u12_t n, u4_t v)
 {
+  static int displayWriteCount = 0;
+
   if (n < MEM_RAM_SIZE) {
     /* RAM */
     //g_hal->log(LOG_MEMORY, "RAM              - ");
@@ -690,11 +701,19 @@ static void set_memory(u12_t n, u4_t v)
     //memory[n] = v;
   } else if (n >= MEM_DISPLAY1_ADDR && n < (MEM_DISPLAY1_ADDR + MEM_DISPLAY1_SIZE)) {
     /* Display Memory 1 */
+    displayWriteCount++;
+    if (displayWriteCount <= 3) {
+      Serial.printf("[CPU] Writing to Display Memory 1: Addr=0x%03X, Val=0x%X\n", n, v);
+    }
     set_lcd(n, v);
     //memory[n - MEM_DISPLAY1_ADDR_OFS] = v;
     //g_hal->log(LOG_MEMORY, "Display Memory 1 - ");
   } else if (n >= MEM_DISPLAY2_ADDR && n < (MEM_DISPLAY2_ADDR + MEM_DISPLAY2_SIZE)) {
     /* Display Memory 2 */
+    displayWriteCount++;
+    if (displayWriteCount <= 3) {
+      Serial.printf("[CPU] Writing to Display Memory 2: Addr=0x%03X, Val=0x%X\n", n, v);
+    }
     set_lcd(n, v);
     //memory[n - MEM_DISPLAY2_ADDR_OFS] = v;
     //g_hal->log(LOG_MEMORY, "Display Memory 2 - ");

@@ -342,8 +342,15 @@ void setup() {
   Serial.println(F("\n[Main] Tamagotchi initialized!"));
   Serial.println(F("[Main] Use encoder to navigate, press to select\n"));
 
+  // CRITICAL: Run TamaLib to populate LCD matrix after state load
+  // cpu_set_state doesn't trigger LCD updates - need to run CPU cycles
+  Serial.println(F("[Main] Running TamaLib to populate LCD..."));
+  for (int i = 0; i < 100; i++) {
+    tamalib_mainloop_step_by_step();
+  }
+
   // Debug: Check matrix_buffer contents
-  Serial.println(F("[Debug] Checking matrix_buffer after state load:"));
+  Serial.println(F("[Debug] Checking matrix_buffer after TamaLib run:"));
   int pixelCount = 0;
   for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
     for (uint8_t x = 0; x < LCD_WIDTH; x++) {

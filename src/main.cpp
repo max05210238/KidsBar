@@ -13,6 +13,9 @@
 #include "encoder_pcnt.h"
 #include "led_status.h"
 #include "bitmaps.h"
+#include "rtc_manager.h"
+#include "battery_manager.h"
+#include "time_setup.h"
 
 extern "C" {
   #include "tamalib.h"
@@ -27,6 +30,10 @@ extern "C" {
 GxEPD2_BW<GxEPD2_290_BS, GxEPD2_290_BS::HEIGHT> display(
   GxEPD2_290_BS(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
 );
+
+// RTC and Battery management
+RTCManager rtcManager;
+BatteryManager batteryManager;
 
 // ==================== STATE ====================
 
@@ -62,8 +69,9 @@ static void hal_sleep_until(timestamp_t ts) {
 }
 
 static timestamp_t hal_get_timestamp(void) {
-  // Return milliseconds - matches ts_freq=1000 passed to tamalib_init()
-  return millis();
+  // Return milliseconds from RTC - real time that persists across reboots
+  // This is CRITICAL for Tamagotchi to age properly
+  return (timestamp_t)rtcManager.getTimestampMs();
 }
 
 static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
@@ -137,7 +145,40 @@ static void hal_update_screen(void) {
   do {
     display.fillScreen(GxEPD_WHITE);
 
+    // Draw status bar at top
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont();
+
+    // Time (left side)
+    int h, m, s;
+    rtcManager.getTime(h, m, s);
+    char timeBuf[12];
+    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", h, m);
+    display.setCursor(2, 2);
+    display.print(timeBuf);
+
+    // Battery (right side)
+    int battPct = batteryManager.getPercentage();
+    char battBuf[8];
+    snprintf(battBuf, sizeof(battBuf), "%d%%", battPct);
+    display.setCursor(display.width() - 30, 2);
+    display.print(battBuf);
+
+    // Battery icon (simple)
+    int battX = display.width() - 48;
+    int battY = 1;
+    display.drawRect(battX, battY, 14, 8, GxEPD_BLACK);
+    display.fillRect(battX + 14, battY + 2, 2, 4, GxEPD_BLACK);
+    if (battPct > 20) {
+      int fillWidth = (battPct * 12) / 100;
+      display.fillRect(battX + 1, battY + 1, fillWidth, 6, GxEPD_BLACK);
+    }
+
+    // Separator line
+    display.drawLine(0, 12, display.width(), 12, GxEPD_BLACK);
+
     // Draw Tamagotchi LCD (32x16 pixels, scaled 3x = 96x48)
+    // Offset down to make room for status bar
     for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
       for (uint8_t x = 0; x < LCD_WIDTH; x++) {
         uint8_t byte_idx = x / 8;
@@ -146,7 +187,7 @@ static void hal_update_screen(void) {
 
         if (g_matrix[y][byte_idx] & mask) {
           int16_t screen_x = 16 + (x * 3);
-          int16_t screen_y = 20 + (y * 3);
+          int16_t screen_y = 28 + (y * 3);  // Offset for status bar
           display.fillRect(screen_x, screen_y, 3, 3, GxEPD_BLACK);
         }
       }
@@ -245,13 +286,34 @@ void setup() {
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setFont();
+    display.setCursor(80, 60);
+    display.print(F("KidsBar"));
+  } while (display.nextPage());
+
+  // Init encoder early (needed for time setup)
+  encoderPcntBegin(ENC_CLK_PIN, ENC_DT_PIN);
+  pinMode(ENC_SW_PIN, INPUT_PULLUP);
+
+  // Init RTC and Battery
+  rtcManager.begin();
+  batteryManager.begin(34, 2.0);  // GPIO34, divider ratio 2.0
+
+  // Time setup if not set
+  if (!rtcManager.isTimeSet()) {
+    Serial.println(F("Time not set - running setup..."));
+    TimeSetup timeSetup;
+    timeSetup.run(display, rtcManager, g_encStepAccum, g_encMux);
+  }
+
+  // Show welcome again after time setup
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setFont();
     display.setCursor(60, 60);
     display.print(F("Tamagotchi"));
   } while (display.nextPage());
-
-  // Init encoder
-  encoderPcntBegin(ENC_CLK_PIN, ENC_DT_PIN);
-  pinMode(ENC_SW_PIN, INPUT_PULLUP);
 
   // Init LED
   ledStatusBegin(NEOPIXEL_PIN, NEOPIXEL_COUNT, BOARD_RGB_PIN, BOARD_RGB_COUNT);

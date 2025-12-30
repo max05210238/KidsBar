@@ -308,12 +308,22 @@ u32_t cpu_get_depth(void)
 
 static void generate_interrupt(int_slot_t slot, u8_t bit)
 {
+  static int intCount = 0;
+
+  intCount++;
+  if (intCount <= 3) {
+    printf("[CPU] Interrupt #%d: slot=%d, bit=%d\n", intCount, slot, bit);
+  }
+
   /* Set the factor flag no matter what */
   interrupts[slot].factor_flag_reg = interrupts[slot].factor_flag_reg | (0x1 << bit);
 
   /* Trigger the INT only if not masked */
   if (interrupts[slot].mask_reg & (0x1 << bit)) {
     interrupts[slot].triggered = 1;
+    if (intCount <= 3) {
+      printf("[CPU] Interrupt triggered!\n");
+    }
   }
 }
 

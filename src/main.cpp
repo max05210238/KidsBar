@@ -357,15 +357,20 @@ void setup() {
   // CRITICAL: Run TamaLib to populate LCD matrix after state load
   // cpu_set_state doesn't trigger LCD updates - need to run CPU cycles
   Serial.println(F("[Main] Running TamaLib to populate LCD..."));
+  Serial.println(F("[Main] Need ~32768 ticks for first 1Hz interrupt"));
 
-  // Run in smaller batches with watchdog reset
-  for (int batch = 0; batch < 10; batch++) {
-    for (int i = 0; i < 10; i++) {
+  // Run many more steps to trigger clock interrupt (need 32768 ticks)
+  // Average ~5 cycles per instruction = ~6500 instructions needed
+  for (int batch = 0; batch < 100; batch++) {
+    for (int i = 0; i < 100; i++) {
       tamalib_mainloop_step_by_step();
     }
     yield(); // Let ESP32 handle background tasks
-    Serial.printf("[Main] Batch %d/10 complete\n", batch + 1);
+    if (batch % 10 == 9) {
+      Serial.printf("[Main] Batch %d/100 complete\n", batch + 1);
+    }
   }
+  Serial.println(F("[Main] TamaLib run complete (10,000 steps)"));
 
   Serial.println(F("[Main] TamaLib run complete"));
 

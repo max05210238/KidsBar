@@ -699,27 +699,32 @@ static void set_memory(u12_t n, u4_t v)
     return;
   }
 }
-/*
 void cpu_refresh_hw(void)
 {
   static const struct range {
     u12_t addr;
     u12_t size;
   } refresh_locs[] = {
-    { MEM_DISPLAY1_ADDR, MEM_DISPLAY1_SIZE }, // Display Memory 1 
-    { MEM_DISPLAY2_ADDR, MEM_DISPLAY2_SIZE }, // Display Memory 2 
-    { REG_BUZZER_CTRL1, 1 }, // Buzzer frequency 
-    { REG_K40_K43_BZ_OUTPUT_PORT, 1 }, // Buzzer enabled 
+    { MEM_DISPLAY1_ADDR, MEM_DISPLAY1_SIZE }, // Display Memory 1
+    { MEM_DISPLAY2_ADDR, MEM_DISPLAY2_SIZE }, // Display Memory 2
+    { REG_BUZZER_CTRL1, 1 }, // Buzzer frequency
+    { REG_K40_K43_BZ_OUTPUT_PORT, 1 }, // Buzzer enabled
 
     { 0, 0 }, // end of list
   };
 
+  // Refresh hardware by writing to memory-mapped registers
+  // For display memory, write 0 to trigger the hardware callbacks
+  // This forces the display to update even though display memory isn't persisted
   for (int i = 0; refresh_locs[i].size != 0; i++) {
     for (u12_t n = refresh_locs[i].addr; n < (refresh_locs[i].addr + refresh_locs[i].size); n++) {
-      set_memory(n, memory[n]);
+      // For display addresses, write 0 since display memory is not stored
+      // For other addresses, read from memory array
+      u4_t value = (n >= MEM_DISPLAY1_ADDR && n < MEM_DISPLAY2_ADDR + MEM_DISPLAY2_SIZE) ? 0 : get_memory(n);
+      set_memory(n, value);
     }
   }
-}*/
+}
 
 static u4_t get_rq(u12_t rq)
 {

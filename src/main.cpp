@@ -68,6 +68,12 @@ static timestamp_t hal_get_timestamp(void) {
 
 static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
   // Buffer pixel changes - will be rendered on next update_screen()
+  static uint32_t call_count = 0;
+  if (call_count < 10) {
+    Serial.printf("set_lcd_matrix called: x=%u, y=%u, val=%u\n", x, y, val);
+    call_count++;
+  }
+
   if (x >= LCD_WIDTH || y >= LCD_HEIGHT) return;
 
   uint8_t byte_idx = x / 8;
@@ -260,25 +266,27 @@ void setup() {
   // Init storage
   initEEPROM();
 
-  // Load state
+  // Load state (these functions call cpu_set_state internally)
   if (validEEPROM()) {
     Serial.println(F("Loading saved state..."));
     loadStateFromEEPROM(&g_cpu_state);
   } else {
     Serial.println(F("New Tamagotchi - loading egg..."));
-    loadHardcodedState(&g_cpu_state);
+    loadHardcodedState(&g_cpu_state);  // Already calls cpu_set_state() inside
   }
-
-  // CRITICAL: Restore CPU state into TamaLib
-  cpu_set_state(&g_cpu_state);
-  Serial.println(F("CPU state restored"));
 
   // Run CPU for initial cycles to trigger clock interrupt
   Serial.println(F("Running initial CPU cycles..."));
+  uint32_t step_count = 0;
   for (int i = 0; i < 50000; i++) {
-    cpu_step();
+    int result = cpu_step();
+    if (result != 0) {
+      Serial.printf("CPU step %d returned %d (halted/breakpoint)\n", i, result);
+      break;
+    }
+    step_count++;
   }
-  Serial.println(F("CPU initialization complete"));
+  Serial.printf("CPU initialization complete - executed %u steps\n", step_count);
 
   Serial.println(F("Ready!\n"));
   setLedOff();

@@ -345,9 +345,17 @@ void setup() {
   // CRITICAL: Run TamaLib to populate LCD matrix after state load
   // cpu_set_state doesn't trigger LCD updates - need to run CPU cycles
   Serial.println(F("[Main] Running TamaLib to populate LCD..."));
-  for (int i = 0; i < 100; i++) {
-    tamalib_mainloop_step_by_step();
+
+  // Run in smaller batches with watchdog reset
+  for (int batch = 0; batch < 10; batch++) {
+    for (int i = 0; i < 10; i++) {
+      tamalib_mainloop_step_by_step();
+    }
+    yield(); // Let ESP32 handle background tasks
+    Serial.printf("[Main] Batch %d/10 complete\n", batch + 1);
   }
+
+  Serial.println(F("[Main] TamaLib run complete"));
 
   // Debug: Check matrix_buffer contents
   Serial.println(F("[Debug] Checking matrix_buffer after TamaLib run:"));

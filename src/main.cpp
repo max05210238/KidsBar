@@ -342,6 +342,22 @@ void setup() {
   Serial.println(F("\n[Main] Tamagotchi initialized!"));
   Serial.println(F("[Main] Use encoder to navigate, press to select\n"));
 
+  // Debug: Check matrix_buffer contents
+  Serial.println(F("[Debug] Checking matrix_buffer after state load:"));
+  int pixelCount = 0;
+  for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
+    for (uint8_t x = 0; x < LCD_WIDTH; x++) {
+      uint8_t mask = 0b10000000 >> (x % 8);
+      if ((matrix_buffer[y][x / 8] & mask) != 0) {
+        pixelCount++;
+        if (pixelCount <= 10) {
+          Serial.printf("[Debug] Pixel ON at (%d,%d)\n", x, y);
+        }
+      }
+    }
+  }
+  Serial.printf("[Debug] Total pixels ON: %d (should be > 0 for egg!)\n", pixelCount);
+
   // Force initial screen update to show the egg
   Serial.println(F("[Main] Forcing initial screen update..."));
   hal_update_screen();

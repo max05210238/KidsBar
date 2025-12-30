@@ -23,6 +23,7 @@ extern "C" {
 #include "tamalib.h"
 #include "hw.h"
 #include "hal.h"
+int cpu_step(void);  // Direct CPU execution without screen updates
 }
 
 // Savestate
@@ -359,18 +360,23 @@ void setup() {
   Serial.println(F("[Main] Running TamaLib to populate LCD..."));
   Serial.println(F("[Main] Need ~32768 ticks for first 1Hz interrupt"));
 
-  // Run many more steps to trigger clock interrupt (need 32768 ticks)
-  // Average ~5 cycles per instruction = ~6500 instructions needed
-  for (int batch = 0; batch < 100; batch++) {
+  // Temporarily disable screen updates during initial CPU run
+  extern void tamalib_set_framerate(u8_t framerate);
+  tamalib_set_framerate(0);  // Disable screen updates
+
+  // Run many steps to trigger clock interrupt (need 32768 ticks)
+  for (int batch = 0; batch < 200; batch++) {
     for (int i = 0; i < 100; i++) {
-      tamalib_mainloop_step_by_step();
+      cpu_step();  // Call CPU directly, skip screen update check
     }
     yield(); // Let ESP32 handle background tasks
-    if (batch % 10 == 9) {
-      Serial.printf("[Main] Batch %d/100 complete\n", batch + 1);
+    if (batch % 50 == 49) {
+      Serial.printf("[Main] Batch %d/200 complete (~%d ticks)\n", batch + 1, (batch + 1) * 100 * 5);
     }
   }
-  Serial.println(F("[Main] TamaLib run complete (10,000 steps)"));
+
+  tamalib_set_framerate(3);  // Re-enable screen updates at 3 fps
+  Serial.println(F("[Main] TamaLib run complete (20,000 steps)"));
 
   Serial.println(F("[Main] TamaLib run complete"));
 

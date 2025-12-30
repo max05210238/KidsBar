@@ -270,29 +270,36 @@ void setup() {
   if (validEEPROM()) {
     Serial.println(F("Loading saved state..."));
     loadStateFromEEPROM(&g_cpu_state);
+    // CRITICAL: Refresh hardware to trigger display update callbacks
+    Serial.println(F("Refreshing display hardware..."));
+    cpu_refresh_hw();
+    Serial.println(F("Display hardware refreshed"));
   } else {
-    Serial.println(F("New Tamagotchi - loading egg..."));
-    loadHardcodedState(&g_cpu_state);  // Already calls cpu_set_state() inside
+    // For new Tamagotchi, do a complete CPU reset to start from boot code (PC=0x0100)
+    // instead of using hardcoded mid-execution state
+    Serial.println(F("New Tamagotchi - resetting CPU to boot..."));
+    cpu_reset();
+    Serial.println(F("CPU reset complete - starting from PC=0x0100"));
   }
 
-  // CRITICAL: Refresh hardware to trigger display update callbacks
-  // Display memory is not persisted, so we force a refresh by writing to display addresses
-  Serial.println(F("Refreshing display hardware..."));
-  cpu_refresh_hw();
-  Serial.println(F("Display hardware refreshed"));
-
-  // Run CPU for initial cycles to trigger clock interrupt
-  Serial.println(F("Running initial CPU cycles..."));
+  // Run CPU for 3 seconds of real time to allow initialization and first clock interrupt
+  Serial.println(F("Running CPU for 3 seconds to trigger clock interrupts..."));
+  unsigned long start_time = millis();
   uint32_t step_count = 0;
-  for (int i = 0; i < 50000; i++) {
+  while (millis() - start_time < 3000) {
     int result = cpu_step();
     if (result != 0) {
-      Serial.printf("CPU step %d returned %d (halted/breakpoint)\n", i, result);
+      Serial.printf("CPU halted at step %u (result=%d)\n", step_count, result);
       break;
     }
     step_count++;
+
+    // Yield occasionally to allow other tasks
+    if (step_count % 1000 == 0) {
+      yield();
+    }
   }
-  Serial.printf("CPU initialization complete - executed %u steps\n", step_count);
+  Serial.printf("CPU ran for %lu ms, executed %u steps\n", millis() - start_time, step_count);
 
   Serial.println(F("Ready!\n"));
   setLedOff();

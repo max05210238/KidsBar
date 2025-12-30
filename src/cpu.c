@@ -308,22 +308,12 @@ u32_t cpu_get_depth(void)
 
 static void generate_interrupt(int_slot_t slot, u8_t bit)
 {
-  static int intCount = 0;
-
-  intCount++;
-  if (intCount <= 3) {
-    printf("[CPU] Interrupt #%d: slot=%d, bit=%d\n", intCount, slot, bit);
-  }
-
   /* Set the factor flag no matter what */
   interrupts[slot].factor_flag_reg = interrupts[slot].factor_flag_reg | (0x1 << bit);
 
   /* Trigger the INT only if not masked */
   if (interrupts[slot].mask_reg & (0x1 << bit)) {
     interrupts[slot].triggered = 1;
-    if (intCount <= 3) {
-      printf("[CPU] Interrupt triggered!\n");
-    }
   }
 }
 
@@ -615,17 +605,8 @@ static void set_io(u12_t n, u4_t v)
 
 static void set_lcd(u12_t n, u4_t v)
 {
-  static int lcdCallCount = 0;
   u8_t i;
   u8_t seg, com0;
-
-  lcdCallCount++;
-  if (lcdCallCount <= 5) {
-    printf("[CPU] set_lcd() called! Address=0x%03X, Value=0x%X\n", n, v);
-  }
-  if (lcdCallCount == 1) {
-    printf("[CPU] *** LCD CONTROLLER IS ACTIVE ***\n");
-  }
 
   seg = ((n & 0x7F) >> 1);
   com0 = (((n & 0x80) >> 7) * 8 + (n & 0x1) * 4);
@@ -698,44 +679,25 @@ static u4_t get_memory(u12_t n)
 
 static void set_memory(u12_t n, u4_t v)
 {
-  static int displayWriteCount = 0;
-
   if (n < MEM_RAM_SIZE) {
     /* RAM */
-    //g_hal->log(LOG_MEMORY, "RAM              - ");
     if ((n & 0x1)==0) {
       memory[n>>1] = (memory[n>>1] & 0x0F) | (v << 4);
     } else {
       memory[n>>1] = (memory[n>>1] & 0xF0) | v;
     }
-    //memory[n] = v;
   } else if (n >= MEM_DISPLAY1_ADDR && n < (MEM_DISPLAY1_ADDR + MEM_DISPLAY1_SIZE)) {
     /* Display Memory 1 */
-    displayWriteCount++;
-    if (displayWriteCount <= 3) {
-      printf("[CPU] Writing to Display Memory 1: Addr=0x%03X, Val=0x%X\n", n, v);
-    }
     set_lcd(n, v);
-    //memory[n - MEM_DISPLAY1_ADDR_OFS] = v;
-    //g_hal->log(LOG_MEMORY, "Display Memory 1 - ");
   } else if (n >= MEM_DISPLAY2_ADDR && n < (MEM_DISPLAY2_ADDR + MEM_DISPLAY2_SIZE)) {
     /* Display Memory 2 */
-    displayWriteCount++;
-    if (displayWriteCount <= 3) {
-      printf("[CPU] Writing to Display Memory 2: Addr=0x%03X, Val=0x%X\n", n, v);
-    }
     set_lcd(n, v);
-    //memory[n - MEM_DISPLAY2_ADDR_OFS] = v;
-    //g_hal->log(LOG_MEMORY, "Display Memory 2 - ");
   } else if (n >= MEM_IO_ADDR && n < (MEM_IO_ADDR + MEM_IO_SIZE)) {
     /* I/O Memory */
     set_io(n, v);
-    //g_hal->log(LOG_MEMORY, "I/O              - ");
   } else {
-    //g_hal->log(LOG_ERROR,   "Write 0x%X to invalid memory address 0x%03X - PC = 0x%04X\n", v, n, pc);
     return;
   }
-  //g_hal->log(LOG_MEMORY, "Write 0x%X - Address 0x%03X - PC = 0x%04X\n", v, n, pc);
 }
 /*
 void cpu_refresh_hw(void)
@@ -1872,8 +1834,6 @@ void cpu_reset(void)
 {
   u13_t i;
 
-  printf("[CPU] cpu_reset() called\n");
-
   /* Registers and variables init */
   pc = TO_PC(0, 1, 0x00); // PC starts at bank 0, page 1, step 0
   np = TO_NP(0, 1); // NP starts at page 1
@@ -1884,33 +1844,18 @@ void cpu_reset(void)
   sp = 0; // undef
   flags = 0;
 
-  //sprintf(logMsg, "Start pc 1:0x%04X, %d", pc, pc); g_hal->log(LOG_ERROR, logMsg);
-
   /* Init RAM to zeros */
   for (i = 0; i < MEMORY_SIZE; i++) {
     memory[i] = 0;
   }
-  /*for (i = 0; i < MEM_IO_SIZE; i++) {
-    io_memory[i] = 0;
-  } */
-
-  //io_memory[REG_K40_K43_BZ_OUTPUT_PORT - MEM_IO_ADDR_OFS] = 0xF; // Output port (R40-R43)
-  //io_memory[REG_LCD_CTRL - MEM_IO_ADDR_OFS] = 0x8; // LCD control
-  /* TODO: Input relation register */
 
   cpu_sync_ref_timestamp();
-
-  printf("[CPU] cpu_reset() complete - PC=0x%04X (should be 0x100)\n", pc);
 }
 
 bool_t cpu_init(u32_t freq)
 {
-  //g_program = program;
-  //g_breakpoints = breakpoints;
-  printf("[CPU] cpu_init() called with freq=%u Hz\n", (unsigned int)freq);
   ts_freq = freq;
   cpu_reset();
-  printf("[CPU] cpu_init() complete\n");
   return 0;
 }
 
@@ -1938,20 +1883,9 @@ int cpu_step(void)
 {
   u12_t op;
   u8_t i;
-  //breakpoint_t *bp = g_breakpoints;
   static u8_t previous_cycles = 0;
-  static int stepCount = 0;
-
-  stepCount++;
-  if (stepCount <= 5) {
-    printf("[CPU] Step #%d: PC=0x%04X\n", stepCount, pc);
-  }
 
   op = getProgramOpCode(pc);
-
-  if (stepCount <= 5) {
-    printf("[CPU] Opcode at PC=0x%04X: 0x%03X\n", pc, op);
-  }
 
   //op_t0 *ops = (op_t0 *)pgm_read_ptr_near(ops0);
 

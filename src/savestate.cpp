@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "savestate.h"
+#include "hardcoded_state.h"
 
 extern "C" {
 #include "cpu.h"
@@ -84,4 +85,28 @@ void eraseStateFromEEPROM() {
   Serial.println(F("[Storage] Erasing saved state..."));
   prefs.clear();
   Serial.println(F("[Storage] State erased"));
+}
+
+void loadHardcodedState(cpu_state_t* cpuState) {
+  Serial.println(F("[Storage] Loading hardcoded initial state..."));
+
+  cpu_get_state(cpuState);
+  u4_t *memTemp = cpuState->memory;
+  uint16_t i;
+  uint8_t *cpuS = (uint8_t *)cpuState;
+
+  // Load CPU state from PROGMEM
+  for (i = 0; i < sizeof(cpu_state_t); i++) {
+    cpuS[i] = pgm_read_byte_near(hardcodedState + i);
+  }
+
+  // Load memory from PROGMEM
+  for (i = 0; i < MEMORY_SIZE; i++) {
+    memTemp[i] = pgm_read_byte_near(hardcodedState + sizeof(cpu_state_t) + i);
+  }
+
+  cpuState->memory = memTemp;
+  cpu_set_state(cpuState);
+
+  Serial.println(F("[Storage] Hardcoded state loaded - Tamagotchi egg ready!"));
 }

@@ -310,12 +310,13 @@ void setup() {
   Serial.println(F("[Storage] Initializing NVS..."));
   initEEPROM();
 
-  // Load saved state
+  // Load saved state or start with egg
   if (validEEPROM()) {
     Serial.println(F("[Storage] Loading saved state..."));
     loadStateFromEEPROM(&cpuState);
   } else {
-    Serial.println(F("[Storage] No saved state, starting fresh"));
+    Serial.println(F("[Storage] No saved state, loading initial egg state"));
+    loadHardcodedState(&cpuState);
   }
 
   Serial.println(F("\n[Main] Tamagotchi initialized!"));

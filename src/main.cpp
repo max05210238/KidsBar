@@ -342,6 +342,10 @@ void setup() {
   Serial.println(F("\n[Main] Tamagotchi initialized!"));
   Serial.println(F("[Main] Use encoder to navigate, press to select\n"));
 
+  // Force initial screen update to show the egg
+  Serial.println(F("[Main] Forcing initial screen update..."));
+  hal_update_screen();
+
   setLedOff();  // LED off
 }
 

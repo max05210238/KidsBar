@@ -170,9 +170,9 @@ void drawTamaRow(uint8_t tamaLCD_y, int16_t ActualLCD_y, uint8_t pixelSize) {
   for (uint8_t i = 0; i < LCD_WIDTH; i++) {
     uint8_t mask = 0b10000000 >> (i % 8);
     if ((matrix_buffer[tamaLCD_y][i / 8] & mask) != 0) {
-      // Draw pixel at position (scale up)
+      // Draw pixel at position (scale up by 3x)
       int16_t x = 16 + (i * 3);  // Start at x=16, 3 pixels per Tama pixel
-      display.fillRect(x, ActualLCD_y, 2, pixelSize, GxEPD_BLACK);
+      display.fillRect(x, ActualLCD_y, 3, pixelSize, GxEPD_BLACK);  // Width should be 3, not 2
     }
   }
 }
@@ -190,6 +190,14 @@ void drawTamaSelection(int16_t y) {
 }
 
 static void hal_update_screen(void) {
+  static int updateCount = 0;
+  updateCount++;
+
+  // Debug: Print first few updates
+  if (updateCount <= 5) {
+    Serial.printf("[Display] Update #%d - Drawing Tamagotchi LCD\n", updateCount);
+  }
+
   // Use partial update for fast refresh (no flicker)
   // E-ink will only update changed pixels
   display.setPartialWindow(0, 0, display.width(), display.height());
@@ -197,13 +205,13 @@ static void hal_update_screen(void) {
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    // Draw Tamagotchi LCD (32x32 scaled to ~96x96)
+    // Draw Tamagotchi LCD (32x16 scaled 3x = 96x48)
     for (uint8_t j = 0; j < LCD_HEIGHT; j++) {
-      drawTamaRow(j, j * 3, 2);
+      drawTamaRow(j, 20 + j * 3, 3);  // Start at y=20, 3x3 pixel scaling
     }
 
     // Draw icon menu at bottom
-    drawTamaSelection(110);
+    drawTamaSelection(90);
 
   } while (display.nextPage());
 }

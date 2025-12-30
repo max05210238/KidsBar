@@ -275,6 +275,12 @@ void setup() {
     loadHardcodedState(&g_cpu_state);  // Already calls cpu_set_state() inside
   }
 
+  // CRITICAL: Refresh hardware to trigger display update callbacks
+  // Display memory is not persisted, so we force a refresh by writing to display addresses
+  Serial.println(F("Refreshing display hardware..."));
+  cpu_refresh_hw();
+  Serial.println(F("Display hardware refreshed"));
+
   // Run CPU for initial cycles to trigger clock interrupt
   Serial.println(F("Running initial CPU cycles..."));
   uint32_t step_count = 0;

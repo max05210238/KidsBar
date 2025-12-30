@@ -341,18 +341,15 @@ void setup() {
   Serial.println(F("[Storage] Initializing NVS..."));
   initEEPROM();
 
-  // TEMPORARY: Force load egg state and clear old saves
-  // This ensures fresh start with proper initial state
-  Serial.println(F("[Storage] Clearing old state and loading fresh egg..."));
+  // EXPERIMENTAL: Skip state loading entirely - let TamaLib start fresh
+  // This will test if the problem is with hardcoded_state data
+  Serial.println(F("[Storage] SKIPPING state load - testing fresh TamaLib"));
   eraseStateFromEEPROM();
-  loadHardcodedState(&cpuState);
 
-  // TODO: Restore normal save/load logic after testing:
-  // if (validEEPROM()) {
-  //   loadStateFromEEPROM(&cpuState);
-  // } else {
-  //   loadHardcodedState(&cpuState);
-  // }
+  // Don't load ANY state - let TamaLib run from reset
+  // loadHardcodedState(&cpuState);
+
+  Serial.println(F("[Storage] TamaLib will start from reset state"));
 
   Serial.println(F("\n[Main] Tamagotchi initialized!"));
   Serial.println(F("[Main] Use encoder to navigate, press to select\n"));

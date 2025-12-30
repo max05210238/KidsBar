@@ -190,8 +190,9 @@ void drawTamaSelection(int16_t y) {
 }
 
 static void hal_update_screen(void) {
-  // Full update for E-ink (slower but complete)
-  display.setFullWindow();
+  // Use partial update for fast refresh (no flicker)
+  // E-ink will only update changed pixels
+  display.setPartialWindow(0, 0, display.width(), display.height());
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);

@@ -38,9 +38,6 @@ GxEPD2_BW<GxEPD2_290_BS, GxEPD2_290_BS::HEIGHT> display(
   GxEPD2_290_BS(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
 );
 
-// External LED
-extern Adafruit_NeoPixel ledExternal;
-
 // Preferences for NVS storage
 Preferences prefs;
 
@@ -64,10 +61,7 @@ enum ButtonState {
 ButtonState currentButton = BTN_NONE;
 
 // ==================== TamaLib Variables ====================
-
-#define LCD_HEIGHT 32
-#define LCD_WIDTH 32
-#define ICON_NUM 8
+// Note: LCD_HEIGHT (16) and LCD_WIDTH (32) are defined in hw.h
 
 static uint16_t current_freq = 0;
 static bool_t matrix_buffer[LCD_HEIGHT][LCD_WIDTH / 8] = {{0}};
@@ -234,13 +228,13 @@ void handleEncoderInput() {
   if (steps > 0) {
     // Clockwise → RIGHT button
     currentButton = BTN_RIGHT_PRESSED;
-    ledSetStatusColor(0, 0, 255, 0.5);  // Blue flash
+    setLed(0, 0, 255);  // Blue flash
     lastInputTime = now;
     Serial.println(F("[Input] RIGHT"));
   } else if (steps < 0) {
     // Counter-clockwise → LEFT button
     currentButton = BTN_LEFT_PRESSED;
-    ledSetStatusColor(255, 0, 0, 0.5);  // Red flash
+    setLed(255, 0, 0);  // Red flash
     lastInputTime = now;
     Serial.println(F("[Input] LEFT"));
   }
@@ -252,7 +246,7 @@ void handleEncoderInput() {
   if (!encSw && lastEncSw) {
     // Button pressed → MIDDLE button
     currentButton = BTN_MIDDLE_PRESSED;
-    ledSetStatusColor(0, 255, 0, 0.5);  // Green flash
+    setLed(0, 255, 0);  // Green flash
     lastInputTime = now;
     Serial.println(F("[Input] MIDDLE"));
   }
@@ -301,9 +295,9 @@ void setup() {
 
   // Initialize LED
   Serial.println(F("[LED] Initializing status LED..."));
-  ledExternal.begin();
-  ledExternal.setBrightness(128);
-  ledSetStatusColor(0, 255, 0, 0.5);  // Green = ready
+  ledStatusBegin(NEOPIXEL_PIN, NEOPIXEL_COUNT, BOARD_RGB_PIN, BOARD_RGB_COUNT);
+  ledStatusSetMasterBrightness(0.5);  // 50% brightness
+  setLed(0, 255, 0);  // Green = ready
 
   // Initialize TamaLib
   Serial.println(F("[Tama] Initializing TamaLib..."));
@@ -326,7 +320,7 @@ void setup() {
   Serial.println(F("\n[Main] Tamagotchi initialized!"));
   Serial.println(F("[Main] Use encoder to navigate, press to select\n"));
 
-  ledSetStatusColor(0, 0, 0, 0);  // LED off
+  setLedOff();  // LED off
 }
 
 // ==================== Main Loop ====================
@@ -356,7 +350,7 @@ void loop() {
     } else if (millis() - resetPressStart > 5000) {
       Serial.println(F("[Main] RESET - Erasing saved state..."));
       eraseStateFromEEPROM();
-      ledSetStatusColor(255, 0, 0, 1.0);  // Red
+      setLed(255, 0, 0);  // Red
       delay(1000);
       ESP.restart();
     }

@@ -39,8 +39,8 @@ static bool_t g_icons[ICON_NUM] = {0};
 volatile int g_encStepAccum = 0;
 portMUX_TYPE g_encMux = portMUX_INITIALIZER_UNLOCKED;
 
-enum Button { BTN_NONE, BTN_LEFT, BTN_MID, BTN_RIGHT };
-static Button g_currentBtn = BTN_NONE;
+// Button state - use int to allow -1 for "none"
+static int g_currentBtn = -1;  // -1 = none, 0 = BTN_LEFT, 1 = BTN_MIDDLE, 2 = BTN_RIGHT
 static unsigned long g_lastBtnTime = 0;
 
 // Auto-save
@@ -97,9 +97,9 @@ static void hal_play_frequency(bool_t en) {
 
 static int hal_handler(void) {
   // Update button state for TamaLib
-  hw_set_button(BTN_LEFT,   g_currentBtn == BTN_LEFT   ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
-  hw_set_button(BTN_MIDDLE, g_currentBtn == BTN_MID    ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
-  hw_set_button(BTN_RIGHT,  g_currentBtn == BTN_RIGHT  ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
+  hw_set_button(BTN_LEFT,   g_currentBtn == (int)BTN_LEFT   ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
+  hw_set_button(BTN_MIDDLE, g_currentBtn == (int)BTN_MIDDLE ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
+  hw_set_button(BTN_RIGHT,  g_currentBtn == (int)BTN_RIGHT  ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
 
   return 0; // Continue
 }
@@ -146,7 +146,7 @@ static void hal_update_screen(void) {
   } while (display.nextPage());
 }
 
-static hal_t g_hal = {
+static hal_t g_hal_impl = {
   .halt = &hal_halt,
   .log = &hal_log,
   .sleep_until = &hal_sleep_until,
@@ -158,6 +158,8 @@ static hal_t g_hal = {
   .play_frequency = &hal_play_frequency,
   .handler = &hal_handler,
 };
+
+hal_t *g_hal = &g_hal_impl;
 
 // ==================== INPUT ====================
 
@@ -177,10 +179,10 @@ void updateInput() {
   portEXIT_CRITICAL(&g_encMux);
 
   if (steps > 0) {
-    g_currentBtn = BTN_RIGHT;
+    g_currentBtn = (int)BTN_RIGHT;
     g_lastBtnTime = now;
   } else if (steps < 0) {
-    g_currentBtn = BTN_LEFT;
+    g_currentBtn = (int)BTN_LEFT;
     g_lastBtnTime = now;
   }
 
@@ -189,14 +191,14 @@ void updateInput() {
   bool sw = digitalRead(ENC_SW_PIN);
 
   if (!sw && lastSw) {
-    g_currentBtn = BTN_MID;
+    g_currentBtn = (int)BTN_MIDDLE;
     g_lastBtnTime = now;
   }
   lastSw = sw;
 
   // Clear button after debounce
   if (now - g_lastBtnTime > 50) {
-    g_currentBtn = BTN_NONE;
+    g_currentBtn = -1;  // None
   }
 }
 
@@ -233,7 +235,7 @@ void setup() {
   setLed(0, 255, 0);
 
   // Init TamaLib
-  tamalib_register_hal(&g_hal);
+  tamalib_register_hal(g_hal);
   tamalib_init(1000); // ts_freq = 1000 (milliseconds)
   tamalib_set_framerate(1); // 1 FPS for E-ink
 

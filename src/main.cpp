@@ -95,6 +95,12 @@ static void hal_update_screen(void);
 
 static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
   static int pixelSetCount = 0;
+  static int totalCalls = 0;
+
+  totalCalls++;
+  if (totalCalls == 1) {
+    Serial.println(F("[HAL] hal_set_lcd_matrix() IS being called!"));
+  }
 
   uint8_t mask;
   if (val) {
@@ -113,9 +119,18 @@ static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
     }
     matrix_buffer[y][x / 8] = matrix_buffer[y][x / 8] & mask;
   }
+
+  if (totalCalls <= 3 || totalCalls % 100 == 0) {
+    Serial.printf("[HAL] hal_set_lcd_matrix called %d times\n", totalCalls);
+  }
 }
 
 static void hal_set_lcd_icon(u8_t icon, bool_t val) {
+  static int iconCalls = 0;
+  if (iconCalls < 5) {
+    Serial.printf("[HAL] hal_set_lcd_icon(%d, %d)\n", icon, val);
+    iconCalls++;
+  }
   icon_buffer[icon] = val;
 }
 

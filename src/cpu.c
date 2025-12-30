@@ -1862,6 +1862,8 @@ void cpu_reset(void)
 {
   u13_t i;
 
+  printf("[CPU] cpu_reset() called\n");
+
   /* Registers and variables init */
   pc = TO_PC(0, 1, 0x00); // PC starts at bank 0, page 1, step 0
   np = TO_NP(0, 1); // NP starts at page 1
@@ -1880,21 +1882,25 @@ void cpu_reset(void)
   }
   /*for (i = 0; i < MEM_IO_SIZE; i++) {
     io_memory[i] = 0;
-  } */ 
+  } */
 
   //io_memory[REG_K40_K43_BZ_OUTPUT_PORT - MEM_IO_ADDR_OFS] = 0xF; // Output port (R40-R43)
   //io_memory[REG_LCD_CTRL - MEM_IO_ADDR_OFS] = 0x8; // LCD control
   /* TODO: Input relation register */
 
   cpu_sync_ref_timestamp();
+
+  printf("[CPU] cpu_reset() complete - PC=0x%04X (should be 0x100)\n", pc);
 }
 
 bool_t cpu_init(u32_t freq)
 {
   //g_program = program;
   //g_breakpoints = breakpoints;
+  printf("[CPU] cpu_init() called with freq=%u Hz\n", (unsigned int)freq);
   ts_freq = freq;
   cpu_reset();
+  printf("[CPU] cpu_init() complete\n");
   return 0;
 }
 
@@ -1924,8 +1930,18 @@ int cpu_step(void)
   u8_t i;
   //breakpoint_t *bp = g_breakpoints;
   static u8_t previous_cycles = 0;
+  static int stepCount = 0;
+
+  stepCount++;
+  if (stepCount <= 5) {
+    printf("[CPU] Step #%d: PC=0x%04X\n", stepCount, pc);
+  }
 
   op = getProgramOpCode(pc);
+
+  if (stepCount <= 5) {
+    printf("[CPU] Opcode at PC=0x%04X: 0x%03X\n", pc, op);
+  }
 
   //op_t0 *ops = (op_t0 *)pgm_read_ptr_near(ops0);
 

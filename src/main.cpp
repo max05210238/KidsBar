@@ -1,149 +1,152 @@
 /*
- * KidsBar Tamagotchi - ArduinoGotchi adapted for ESP32-S3 + E-ink + Rotary Encoder
+ * KidsBar Tamagotchi
+ * Clean rewrite based on ArduinoGotchi + TamaLib
  *
- * Based on ArduinoGotchi by Gary Kwok (GPLv2)
- * Adapted for KidsBar hardware:
- * - ESP32-S3
- * - WaveShare 2.9" E-ink (296x128, black & white)
- * - Rotary encoder input
- * - WS2812B RGB LED status
+ * Hardware: ESP32-S3 + E-ink 2.9" + Rotary Encoder
  */
 
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
-#include <Adafruit_NeoPixel.h>
 #include <Preferences.h>
 
 #include "config.h"
 #include "encoder_pcnt.h"
 #include "led_status.h"
-
-// TamaLib includes
-extern "C" {
-#include "tamalib.h"
-#include "hw.h"
-#include "hal.h"
-}
-
-// Savestate
-#include "savestate.h"
-
-// Bitmaps
 #include "bitmaps.h"
 
-// ==================== Hardware Configuration ====================
+extern "C" {
+  #include "tamalib.h"
+  #include "hw.h"
+  #include "hal.h"
+}
 
-// E-ink Display (2.9", 296x128)
+#include "savestate.h"
+
+// ==================== HARDWARE ====================
+
 GxEPD2_BW<GxEPD2_290_BS, GxEPD2_290_BS::HEIGHT> display(
   GxEPD2_290_BS(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
 );
 
-// Preferences for NVS storage
-Preferences prefs;
+// ==================== STATE ====================
 
-// ==================== Encoder to Button Mapping ====================
+// Tamagotchi state
+static cpu_state_t g_cpu_state;
+static bool_t g_matrix[LCD_HEIGHT][LCD_WIDTH/8] = {{0}};
+static bool_t g_icons[ICON_NUM] = {0};
 
+// Encoder input state
 volatile int g_encStepAccum = 0;
 portMUX_TYPE g_encMux = portMUX_INITIALIZER_UNLOCKED;
 
-#define BTN_DEBOUNCE_MS 50
-uint32_t lastBtnPress = 0;
+enum Button { BTN_NONE, BTN_LEFT, BTN_MID, BTN_RIGHT };
+static Button g_currentBtn = BTN_NONE;
+static unsigned long g_lastBtnTime = 0;
 
-enum ButtonState {
-  BTN_LEFT_PRESSED,
-  BTN_MIDDLE_PRESSED,
-  BTN_RIGHT_PRESSED,
-  BTN_NONE
-};
+// Auto-save
+static unsigned long g_lastSave = 0;
+#define AUTO_SAVE_INTERVAL_MS (5 * 60 * 1000UL)
 
-ButtonState currentButton = BTN_NONE;
-
-// ==================== TamaLib Variables ====================
-
-static uint16_t current_freq = 0;
-static bool_t matrix_buffer[LCD_HEIGHT][LCD_WIDTH / 8] = {{0}};
-static bool_t icon_buffer[ICON_NUM] = {0};
-static cpu_state_t cpuState;
-static unsigned long lastSaveTimestamp = 0;
-
-// Display settings
-#define TAMA_DISPLAY_FRAMERATE 8
-#define AUTO_SAVE_MINUTES 5
-
-// ==================== TamaLib HAL Implementation ====================
+// ==================== HAL IMPLEMENTATION ====================
 
 static void hal_halt(void) {
-  Serial.println(F("[Tama] Halt!"));
+  Serial.println(F("HALT"));
 }
 
-static void hal_log(log_level_t level, char *buff, ...) {
-  // Logging disabled for performance
+static void hal_log(log_level_t level, char *msg, ...) {
+  // Silent
 }
-
-// Virtual timestamp: increments based on CPU execution, not wall clock
-// This prevents screen update spam caused by slow E-ink refresh
-static timestamp_t virtual_timestamp = 0;
 
 static void hal_sleep_until(timestamp_t ts) {
-  // No sleep - we use virtual time
+  // Not used (CPU_SPEED_RATIO = 0)
 }
 
 static timestamp_t hal_get_timestamp(void) {
-  return virtual_timestamp;
+  // Return milliseconds - matches ts_freq=1000 passed to tamalib_init()
+  return millis();
 }
 
-static void hal_update_screen(void);
-
 static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
-  uint8_t mask;
+  // Buffer pixel changes - will be rendered on next update_screen()
+  if (x >= LCD_WIDTH || y >= LCD_HEIGHT) return;
+
+  uint8_t byte_idx = x / 8;
+  uint8_t bit_idx = x % 8;
+  uint8_t mask = 0x80 >> bit_idx;
+
   if (val) {
-    mask = 0b10000000 >> (x % 8);
-    matrix_buffer[y][x / 8] = matrix_buffer[y][x / 8] | mask;
+    g_matrix[y][byte_idx] |= mask;
   } else {
-    mask = 0b01111111;
-    for (byte i = 0; i < (x % 8); i++) {
-      mask = (mask >> 1) | 0b10000000;
-    }
-    matrix_buffer[y][x / 8] = matrix_buffer[y][x / 8] & mask;
+    g_matrix[y][byte_idx] &= ~mask;
   }
 }
 
 static void hal_set_lcd_icon(u8_t icon, bool_t val) {
-  icon_buffer[icon] = val;
+  if (icon < ICON_NUM) {
+    g_icons[icon] = val;
+  }
 }
 
 static void hal_set_frequency(u32_t freq) {
-  current_freq = freq;
+  // No sound yet
 }
 
 static void hal_play_frequency(bool_t en) {
-  // Sound disabled for now
+  // No sound yet
 }
 
 static int hal_handler(void) {
-  // Handle button inputs (from encoder)
-  if (currentButton == BTN_LEFT_PRESSED) {
-    hw_set_button(BTN_LEFT, BTN_STATE_PRESSED);
-  } else {
-    hw_set_button(BTN_LEFT, BTN_STATE_RELEASED);
-  }
+  // Update button state for TamaLib
+  hw_set_button(BTN_LEFT,   g_currentBtn == BTN_LEFT   ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
+  hw_set_button(BTN_MIDDLE, g_currentBtn == BTN_MID    ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
+  hw_set_button(BTN_RIGHT,  g_currentBtn == BTN_RIGHT  ? BTN_STATE_PRESSED : BTN_STATE_RELEASED);
 
-  if (currentButton == BTN_MIDDLE_PRESSED) {
-    hw_set_button(BTN_MIDDLE, BTN_STATE_PRESSED);
-  } else {
-    hw_set_button(BTN_MIDDLE, BTN_STATE_RELEASED);
-  }
-
-  if (currentButton == BTN_RIGHT_PRESSED) {
-    hw_set_button(BTN_RIGHT, BTN_STATE_PRESSED);
-  } else {
-    hw_set_button(BTN_RIGHT, BTN_STATE_RELEASED);
-  }
-
-  return 0;
+  return 0; // Continue
 }
 
-static hal_t hal = {
+static void hal_update_screen(void) {
+  // Actually update the E-ink display
+  // This is called by TamaLib when enough time has elapsed (based on framerate)
+
+  display.setPartialWindow(0, 0, display.width(), display.height());
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+
+    // Draw Tamagotchi LCD (32x16 pixels, scaled 3x = 96x48)
+    for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
+      for (uint8_t x = 0; x < LCD_WIDTH; x++) {
+        uint8_t byte_idx = x / 8;
+        uint8_t bit_idx = x % 8;
+        uint8_t mask = 0x80 >> bit_idx;
+
+        if (g_matrix[y][byte_idx] & mask) {
+          int16_t screen_x = 16 + (x * 3);
+          int16_t screen_y = 20 + (y * 3);
+          display.fillRect(screen_x, screen_y, 3, 3, GxEPD_BLACK);
+        }
+      }
+    }
+
+    // Draw icon menu at bottom
+    for (uint8_t i = 0; i < 8; i++) {
+      int16_t icon_x = i * 16 + 4;
+      int16_t icon_y = 90;
+
+      // Selection triangle
+      if (g_icons[i]) {
+        display.drawLine(icon_x + 6, icon_y + 1, icon_x + 10, icon_y + 1, GxEPD_BLACK);
+        display.drawLine(icon_x + 7, icon_y + 2, icon_x + 9,  icon_y + 2, GxEPD_BLACK);
+        display.drawPixel(icon_x + 8, icon_y + 3, GxEPD_BLACK);
+      }
+
+      // Icon bitmap
+      display.drawBitmap(icon_x, icon_y + 6, bitmaps + i * 18, 16, 9, GxEPD_BLACK);
+    }
+  } while (display.nextPage());
+}
+
+static hal_t g_hal = {
   .halt = &hal_halt,
   .log = &hal_log,
   .sleep_until = &hal_sleep_until,
@@ -156,52 +159,13 @@ static hal_t hal = {
   .handler = &hal_handler,
 };
 
-// ==================== E-ink Display Functions ====================
+// ==================== INPUT ====================
 
-void drawTriangle(int16_t x, int16_t y) {
-  display.drawLine(x + 1, y + 1, x + 5, y + 1, GxEPD_BLACK);
-  display.drawLine(x + 2, y + 2, x + 4, y + 2, GxEPD_BLACK);
-  display.drawPixel(x + 3, y + 3, GxEPD_BLACK);
-}
-
-void drawTamaRow(uint8_t tamaLCD_y, int16_t ActualLCD_y, uint8_t pixelSize) {
-  for (uint8_t i = 0; i < LCD_WIDTH; i++) {
-    uint8_t mask = 0b10000000 >> (i % 8);
-    if ((matrix_buffer[tamaLCD_y][i / 8] & mask) != 0) {
-      int16_t x = 16 + (i * 3);
-      display.fillRect(x, ActualLCD_y, 3, pixelSize, GxEPD_BLACK);
-    }
-  }
-}
-
-void drawTamaSelection(int16_t y) {
-  for (uint8_t i = 0; i < 8; i++) {
-    if (icon_buffer[i]) {
-      drawTriangle(i * 16 + 5, y);
-    }
-    display.drawBitmap(i * 16 + 4, y + 6, bitmaps + i * 18, 16, 9, GxEPD_BLACK);
-  }
-}
-
-static void hal_update_screen(void) {
-  display.setPartialWindow(0, 0, display.width(), display.height());
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
-    for (uint8_t j = 0; j < LCD_HEIGHT; j++) {
-      drawTamaRow(j, 20 + j * 3, 3);
-    }
-    drawTamaSelection(90);
-  } while (display.nextPage());
-}
-
-// ==================== Input Handling ====================
-
-void handleEncoderInput() {
-  static unsigned long lastInputTime = 0;
+void updateInput() {
   unsigned long now = millis();
 
-  if (now - lastInputTime < BTN_DEBOUNCE_MS) {
+  // Debounce
+  if (now - g_lastBtnTime < 50) {
     return;
   }
 
@@ -213,46 +177,43 @@ void handleEncoderInput() {
   portEXIT_CRITICAL(&g_encMux);
 
   if (steps > 0) {
-    currentButton = BTN_RIGHT_PRESSED;
-    lastInputTime = now;
+    g_currentBtn = BTN_RIGHT;
+    g_lastBtnTime = now;
   } else if (steps < 0) {
-    currentButton = BTN_LEFT_PRESSED;
-    lastInputTime = now;
+    g_currentBtn = BTN_LEFT;
+    g_lastBtnTime = now;
   }
 
   // Read encoder button
-  bool encSw = digitalRead(ENC_SW_PIN);
-  static bool lastEncSw = HIGH;
+  static bool lastSw = HIGH;
+  bool sw = digitalRead(ENC_SW_PIN);
 
-  if (!encSw && lastEncSw) {
-    currentButton = BTN_MIDDLE_PRESSED;
-    lastInputTime = now;
+  if (!sw && lastSw) {
+    g_currentBtn = BTN_MID;
+    g_lastBtnTime = now;
   }
+  lastSw = sw;
 
-  lastEncSw = encSw;
-
-  // Clear button state after debounce period
-  if (now - lastInputTime > BTN_DEBOUNCE_MS) {
-    currentButton = BTN_NONE;
+  // Clear button after debounce
+  if (now - g_lastBtnTime > 50) {
+    g_currentBtn = BTN_NONE;
   }
 }
 
-// ==================== Setup ====================
+// ==================== SETUP ====================
 
 void setup() {
   Serial.begin(115200);
   delay(500);
 
-  Serial.println(F("\n========================================"));
-  Serial.println(F("  KidsBar Tamagotchi"));
-  Serial.println(F("========================================\n"));
+  Serial.println(F("\n=== KidsBar Tamagotchi ===\n"));
 
-  // Initialize E-ink display
+  // Init display
   display.init(115200);
   display.setRotation(1);
   display.setTextColor(GxEPD_BLACK);
 
-  // Welcome screen
+  // Welcome
   display.setFullWindow();
   display.firstPage();
   do {
@@ -260,76 +221,65 @@ void setup() {
     display.setFont();
     display.setCursor(60, 60);
     display.print(F("Tamagotchi"));
-    display.setCursor(50, 75);
-    display.print(F("Loading..."));
   } while (display.nextPage());
 
-  // Initialize encoder
+  // Init encoder
   encoderPcntBegin(ENC_CLK_PIN, ENC_DT_PIN);
   pinMode(ENC_SW_PIN, INPUT_PULLUP);
 
-  // Initialize LED
+  // Init LED
   ledStatusBegin(NEOPIXEL_PIN, NEOPIXEL_COUNT, BOARD_RGB_PIN, BOARD_RGB_COUNT);
-  ledStatusSetMasterBrightness(0.5);
+  ledStatusSetMasterBrightness(0.3);
+  setLed(0, 255, 0);
 
-  // Initialize TamaLib
-  tamalib_register_hal(&hal);
-  tamalib_set_framerate(TAMA_DISPLAY_FRAMERATE);
-  tamalib_init(1000000);
+  // Init TamaLib
+  tamalib_register_hal(&g_hal);
+  tamalib_init(1000); // ts_freq = 1000 (milliseconds)
+  tamalib_set_framerate(1); // 1 FPS for E-ink
 
-  // Initialize NVS
+  // Init storage
   initEEPROM();
 
-  // Load state or start fresh
+  // Load state
   if (validEEPROM()) {
-    Serial.println(F("[Storage] Loading saved state..."));
-    loadStateFromEEPROM(&cpuState);
+    Serial.println(F("Loading saved state..."));
+    loadStateFromEEPROM(&g_cpu_state);
   } else {
-    Serial.println(F("[Storage] No saved state - loading hardcoded egg..."));
-    loadHardcodedState(&cpuState);
+    Serial.println(F("New Tamagotchi - loading egg..."));
+    loadHardcodedState(&g_cpu_state);
   }
 
-  Serial.println(F("[Main] Tamagotchi ready!\n"));
-
-  // Initial screen update
-  hal_update_screen();
+  Serial.println(F("Ready!\n"));
   setLedOff();
 }
 
-// ==================== Main Loop ====================
+// ==================== LOOP ====================
 
 void loop() {
-  // Handle encoder input
-  handleEncoderInput();
-
-  // Poll encoder hardware
+  // Update input state
+  updateInput();
   encoderPcntPoll(true, &g_encStepAccum, &g_encMux);
 
-  // Run Tamagotchi emulation
+  // Run Tamagotchi
   tamalib_mainloop_step_by_step();
 
-  // Increment virtual timestamp (simulate time passing)
-  // Increment by ~30 microseconds per step (32768 Hz tick rate)
-  virtual_timestamp += 30;
-
-  // Auto-save every N minutes
-  if ((millis() - lastSaveTimestamp) > (AUTO_SAVE_MINUTES * 60 * 1000UL)) {
-    lastSaveTimestamp = millis();
-    Serial.println(F("[Storage] Auto-saving..."));
-    saveStateToEEPROM(&cpuState);
+  // Auto-save
+  if (millis() - g_lastSave > AUTO_SAVE_INTERVAL_MS) {
+    g_lastSave = millis();
+    Serial.println(F("Auto-save"));
+    saveStateToEEPROM(&g_cpu_state);
   }
 
-  // Long press middle button (5 seconds) to reset
-  static uint32_t resetPressStart = 0;
+  // Long press reset (5 sec)
+  static uint32_t resetStart = 0;
   if (digitalRead(ENC_SW_PIN) == LOW) {
-    if (resetPressStart == 0) {
-      resetPressStart = millis();
-    } else if (millis() - resetPressStart > 5000) {
-      Serial.println(F("[Main] RESET!"));
+    if (resetStart == 0) resetStart = millis();
+    else if (millis() - resetStart > 5000) {
+      Serial.println(F("RESET"));
       eraseStateFromEEPROM();
       ESP.restart();
     }
   } else {
-    resetPressStart = 0;
+    resetStart = 0;
   }
 }

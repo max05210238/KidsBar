@@ -107,6 +107,24 @@ static int hal_handler(void) {
 static void hal_update_screen(void) {
   // Actually update the E-ink display
   // This is called by TamaLib when enough time has elapsed (based on framerate)
+  static uint32_t update_count = 0;
+
+  // Count pixels in buffer
+  uint16_t pixel_count = 0;
+  for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
+    for (uint8_t x = 0; x < LCD_WIDTH/8; x++) {
+      uint8_t byte_val = g_matrix[y][x];
+      for (uint8_t bit = 0; bit < 8; bit++) {
+        if (byte_val & (0x80 >> bit)) pixel_count++;
+      }
+    }
+  }
+
+  Serial.printf("Screen update #%u, pixels=%u, icons=[", ++update_count, pixel_count);
+  for (uint8_t i = 0; i < 8; i++) {
+    Serial.printf("%d", g_icons[i] ? 1 : 0);
+  }
+  Serial.println("]");
 
   display.setPartialWindow(0, 0, display.width(), display.height());
   display.firstPage();
@@ -258,12 +276,20 @@ void setup() {
 // ==================== LOOP ====================
 
 void loop() {
+  static uint32_t last_debug = 0;
+
   // Update input state
   updateInput();
   encoderPcntPoll(true, &g_encStepAccum, &g_encMux);
 
   // Run Tamagotchi
   tamalib_mainloop_step_by_step();
+
+  // Debug output every 5 seconds
+  if (millis() - last_debug >= 5000) {
+    last_debug = millis();
+    Serial.printf("Loop running, timestamp=%lu\n", millis());
+  }
 
   // Auto-save
   if (millis() - g_lastSave > AUTO_SAVE_INTERVAL_MS) {

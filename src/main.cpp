@@ -269,6 +269,17 @@ void setup() {
     loadHardcodedState(&g_cpu_state);
   }
 
+  // CRITICAL: Restore CPU state into TamaLib
+  cpu_set_state(&g_cpu_state);
+  Serial.println(F("CPU state restored"));
+
+  // Run CPU for initial cycles to trigger clock interrupt
+  Serial.println(F("Running initial CPU cycles..."));
+  for (int i = 0; i < 50000; i++) {
+    cpu_step();
+  }
+  Serial.println(F("CPU initialization complete"));
+
   Serial.println(F("Ready!\n"));
   setLedOff();
 }
@@ -295,6 +306,7 @@ void loop() {
   if (millis() - g_lastSave > AUTO_SAVE_INTERVAL_MS) {
     g_lastSave = millis();
     Serial.println(F("Auto-save"));
+    cpu_get_state(&g_cpu_state);  // Get current CPU state
     saveStateToEEPROM(&g_cpu_state);
   }
 

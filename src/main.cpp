@@ -94,10 +94,18 @@ static timestamp_t hal_get_timestamp(void) {
 static void hal_update_screen(void);
 
 static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
+  static int pixelSetCount = 0;
+
   uint8_t mask;
   if (val) {
     mask = 0b10000000 >> (x % 8);
     matrix_buffer[y][x / 8] = matrix_buffer[y][x / 8] | mask;
+
+    // Debug: Print first few pixel sets
+    if (pixelSetCount < 5) {
+      Serial.printf("[LCD] Set pixel (%d,%d) = ON\n", x, y);
+      pixelSetCount++;
+    }
   } else {
     mask = 0b01111111;
     for (byte i = 0; i < (x % 8); i++) {

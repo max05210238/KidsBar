@@ -611,10 +611,10 @@ static void set_lcd(u12_t n, u4_t v)
 
   lcdCallCount++;
   if (lcdCallCount <= 5) {
-    Serial.printf("[CPU] set_lcd() called! Address=0x%03X, Value=0x%X\n", n, v);
+    printf("[CPU] set_lcd() called! Address=0x%03X, Value=0x%X\n", n, v);
   }
   if (lcdCallCount == 1) {
-    Serial.println(F("[CPU] *** LCD CONTROLLER IS ACTIVE ***"));
+    printf("[CPU] *** LCD CONTROLLER IS ACTIVE ***\n");
   }
 
   seg = ((n & 0x7F) >> 1);
@@ -703,7 +703,7 @@ static void set_memory(u12_t n, u4_t v)
     /* Display Memory 1 */
     displayWriteCount++;
     if (displayWriteCount <= 3) {
-      Serial.printf("[CPU] Writing to Display Memory 1: Addr=0x%03X, Val=0x%X\n", n, v);
+      printf("[CPU] Writing to Display Memory 1: Addr=0x%03X, Val=0x%X\n", n, v);
     }
     set_lcd(n, v);
     //memory[n - MEM_DISPLAY1_ADDR_OFS] = v;
@@ -712,7 +712,7 @@ static void set_memory(u12_t n, u4_t v)
     /* Display Memory 2 */
     displayWriteCount++;
     if (displayWriteCount <= 3) {
-      Serial.printf("[CPU] Writing to Display Memory 2: Addr=0x%03X, Val=0x%X\n", n, v);
+      printf("[CPU] Writing to Display Memory 2: Addr=0x%03X, Val=0x%X\n", n, v);
     }
     set_lcd(n, v);
     //memory[n - MEM_DISPLAY2_ADDR_OFS] = v;
